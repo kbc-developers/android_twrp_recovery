@@ -347,7 +347,7 @@ void GUIAction::simulate_progress_bar(void)
 	{
 		if (PartitionManager.stop_backup.get_value()) {
 			DataManager::SetValue("tw_cancel_backup", 1);
-			gui_msg("backup_cancel=Backup Canceled.");
+			gui_msg("backup_cancel=Backup Cancelled");
 			DataManager::SetValue("ui_progress", 0);
 			PartitionManager.stop_backup.set_value(0);
 			return;
@@ -928,7 +928,7 @@ int GUIAction::screenshot(std::string arg __unused)
 		strcpy(path, "/tmp/");
 	}
 
-	if(!TWFunc::Create_Dir_Recursive(path, 0666, uid, gid))
+	if(!TWFunc::Create_Dir_Recursive(path, 0775, uid, gid))
 		return 0;
 
 	tm = time(NULL);
@@ -1169,9 +1169,8 @@ int GUIAction::nandroid(std::string arg)
 		if (arg == "backup") {
 			string Backup_Name;
 			DataManager::GetValue(TW_BACKUP_NAME, Backup_Name);
-			string auto_gen = gui_lookup("auto_gen", "(Auto Generate)");
-			string curr_date = gui_lookup("curr_date", "(Current Date)");
-			if (Backup_Name == "(Auto Generate)" || Backup_Name == "(Current Date)" || Backup_Name == "0" || Backup_Name == "(" || PartitionManager.Check_Backup_Name(true) == 0) {
+			string auto_gen = gui_lookup("auto_generate", "(Auto Generate)");
+			if (Backup_Name == auto_gen || Backup_Name == gui_lookup("curr_date", "(Current Date)") || Backup_Name == "0" || Backup_Name == "(" || PartitionManager.Check_Backup_Name(true) == 0) {
 				ret = PartitionManager.Run_Backup();
 			}
 			else {
@@ -1197,7 +1196,7 @@ int GUIAction::nandroid(std::string arg)
 		}
 		else {
 			DataManager::SetValue("tw_cancel_backup", 1);
-			gui_msg("backup_cancel=Backup Canceled.");
+			gui_msg("backup_cancel=Backup Cancelled");
 			ret = 0;
 		}
 		operation_end(ret);
