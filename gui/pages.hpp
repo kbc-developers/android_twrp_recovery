@@ -140,6 +140,7 @@ public:
 	static void ReleasePackage(std::string name);
 	static int RunReload();
 	static void RequestReload();
+	static void SetStartPage(const std::string& page_name);
 
 	// Used for actions and pages
 	static int ChangePage(std::string name);
@@ -177,7 +178,6 @@ protected:
 protected:
 	static std::map<std::string, PageSet*> mPageSets;
 	static PageSet* mCurrentSet;
-	static PageSet* mBaseSet;
 	static MouseCursor *mMouseCursor;
 	static HardwareKeyboard *mHardwareKeyboard;
 	static bool mReloadTheme;

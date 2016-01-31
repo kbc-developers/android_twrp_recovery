@@ -59,9 +59,9 @@ extern "C"
 {
 	#include "twcommon.h"
 	#include "gui/pages.h"
-	#include "minuitwrp/minui.h"
 	void gui_notifyVarChange(const char *name, const char* value);
 }
+#include "minuitwrp/minui.h"
 
 #define FILE_VERSION 0x00010010
 
@@ -744,7 +744,7 @@ void DataManager::SetDefaultValues()
 		mConstValues.insert(make_pair(TW_HAS_USB_STORAGE, "0"));
 	} else {
 		LOGINFO("Lun file '%s'\n", Lun_File_str.c_str());
-		mConstValues.insert(make_pair(TW_HAS_USB_STORAGE, "1"));
+		mValues.insert(make_pair(TW_HAS_USB_STORAGE, make_pair("1", 0)));
 	}
 #endif
 #ifdef TW_INCLUDE_INJECTTWRP
@@ -922,6 +922,8 @@ void DataManager::SetDefaultValues()
 	mValues.insert(make_pair("tw_never_show_system_ro_page", make_pair("0", 1)));
 	mValues.insert(make_pair("tw_language", make_pair(EXPAND(TW_DEFAULT_LANGUAGE), 1)));
 	LOGINFO("LANG: %s\n", EXPAND(TW_DEFAULT_LANGUAGE));
+
+	mValues.insert(make_pair("tw_has_adopted_storage", make_pair("0", 0)));
 
 	pthread_mutex_unlock(&m_valuesLock);
 }
@@ -1112,9 +1114,7 @@ void DataManager::ReadSettingsFile(void)
 #endif // ifdef TW_OEM_BUILD
 	PartitionManager.Mount_All_Storage();
 	update_tz_environment_variables();
-#ifdef TW_MAX_BRIGHTNESS
 	TWFunc::Set_Brightness(GetStrValue("tw_brightness"));
-#endif
 }
 
 string DataManager::GetCurrentStoragePath(void)

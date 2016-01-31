@@ -43,15 +43,16 @@
 #include "../adb_install.h"
 #include "../fuse_sideload.h"
 #include "blanktimer.hpp"
+
 extern "C" {
 #include "../twcommon.h"
-#include "../minuitwrp/minui.h"
 #include "../variables.h"
 #include "../twinstall.h"
 #include "cutils/properties.h"
 #include "../adb_install.h"
 #include "../set_metadata.h"
 };
+#include "../minuitwrp/minui.h"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
@@ -208,6 +209,7 @@ GUIAction::GUIAction(xml_node<>* node)
 		ADD_ACTION(wipe);
 		ADD_ACTION(refreshsizes);
 		ADD_ACTION(nandroid);
+		ADD_ACTION(fixcontexts);
 		ADD_ACTION(fixpermissions);
 		ADD_ACTION(dd);
 		ADD_ACTION(partitionsd);
@@ -1218,21 +1220,26 @@ int GUIAction::cancelbackup(std::string arg __unused) {
 	return 0;
 }
 
-int GUIAction::fixpermissions(std::string arg __unused)
+int GUIAction::fixcontexts(std::string arg __unused)
 {
 	int op_status = 0;
 
-	operation_start("Fix Permissions");
-	LOGINFO("fix permissions started!\n");
+	operation_start("Fix Contexts");
+	LOGINFO("fix contexts started!\n");
 	if (simulate) {
 		simulate_progress_bar();
 	} else {
-		op_status = PartitionManager.Fix_Permissions();
+		op_status = PartitionManager.Fix_Contexts();
 		if (op_status != 0)
 			op_status = 1; // failure
 	}
 	operation_end(op_status);
 	return 0;
+}
+
+int GUIAction::fixpermissions(std::string arg)
+{
+	return fixcontexts(arg);
 }
 
 int GUIAction::dd(std::string arg)
@@ -1466,6 +1473,7 @@ int GUIAction::decrypt(std::string arg __unused)
 					LOGINFO("Got default contexts and file mode for storage files.\n");
 				}
 			}
+			PartitionManager.Decrypt_Adopted();
 		}
 	}
 
