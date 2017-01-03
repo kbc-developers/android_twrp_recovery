@@ -17,23 +17,25 @@
 #ifndef RECOVERY_INSTALL_H_
 #define RECOVERY_INSTALL_H_
 
+#include <string>
+
 #include "common.h"
-#include "mincrypt/rsa.h"
+#include "minzip/Zip.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-enum { INSTALL_SUCCESS, INSTALL_ERROR, INSTALL_CORRUPT, INSTALL_NONE };
+enum { INSTALL_SUCCESS, INSTALL_ERROR, INSTALL_CORRUPT, INSTALL_NONE, INSTALL_SKIPPED,
+        INSTALL_RETRY };
 // Install the package specified by root_path.  If INSTALL_SUCCESS is
 // returned and *wipe_cache is true on exit, caller should wipe the
 // cache partition.
-int install_package(const char* root_path, bool* wipe_cache,
-                    const char* install_file, bool needs_mount);
-RSAPublicKey* load_keys(const char* filename, int* numKeys);
+int install_package(const char* root_path, bool* wipe_cache, const char* install_file,
+                    bool needs_mount, int retry_count);
 
-#ifdef __cplusplus
-}
-#endif
+// Verify the package by ota keys. Return true if the package is verified successfully,
+// otherwise return false.
+bool verify_package(const unsigned char* package_data, size_t package_size);
+
+// Read meta data file of the package, write its content in the string pointed by meta_data.
+// Return true if succeed, otherwise return false.
+bool read_metadata_from_package(ZipArchive* zip, std::string* meta_data);
 
 #endif  // RECOVERY_INSTALL_H_
