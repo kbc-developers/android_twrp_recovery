@@ -5,16 +5,20 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	mtdutils.c \
-	mounts.c 
+	mounts.c
 
 ifneq ($(filter rk30xx rk3188,$(TARGET_BOARD_PLATFORM)),)
 LOCAL_SRC_FILES += rk3xhack.c
 LOCAL_CFLAGS += -DRK3X
 endif
 
+ifeq ($(TARGET_MTD_BY_NAME),true)
+LOCAL_CFLAGS += -DBYNAME
+endif
+
 LOCAL_MODULE := libmtdutils
 LOCAL_STATIC_LIBRARIES := libcutils libc
-LOCAL_FORCE_STATIC_EXECUTABLE := true
+LOCAL_CLANG := true
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -22,15 +26,20 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	mtdutils.c \
-	mounts.c 
+	mounts.c
 
 ifneq ($(filter rk30xx rk3188,$(TARGET_BOARD_PLATFORM)),)
 LOCAL_SRC_FILES += rk3xhack.c
 LOCAL_CFLAGS += -DRK3X
 endif
 
+ifeq ($(TARGET_MTD_BY_NAME),true)
+LOCAL_CFLAGS += -DBYNAME
+endif
+
 LOCAL_MODULE := libmtdutils
 LOCAL_SHARED_LIBRARIES := libcutils libc
+LOCAL_CLANG := true
 
 include $(BUILD_SHARED_LIBRARY)
 

@@ -1,3 +1,21 @@
+/*
+	Copyright 2017 TeamWin
+	This file is part of TWRP/TeamWin Recovery Project.
+
+	TWRP is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	TWRP is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 // resource.cpp - Source to manage GUI resources
 
 #include <stdarg.h>
@@ -10,8 +28,9 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <fcntl.h>
 
-#include "../minzip/Zip.h"
+#include "../zipwrap.hpp"
 extern "C" {
 #include "../twcommon.h"
 #include "gui.h"
@@ -23,38 +42,24 @@ extern "C" {
 
 #define TMP_RESOURCE_NAME   "/tmp/extract.bin"
 
-Resource::Resource(xml_node<>* node, ZipArchive* pZip __unused)
+Resource::Resource(xml_node<>* node, ZipWrap* pZip __unused)
 {
 	if (node && node->first_attribute("name"))
 		mName = node->first_attribute("name")->value();
 }
 
-int Resource::ExtractResource(ZipArchive* pZip, std::string folderName, std::string fileName, std::string fileExtn, std::string destFile)
+int Resource::ExtractResource(ZipWrap* pZip, std::string folderName, std::string fileName, std::string fileExtn, std::string destFile)
 {
 	if (!pZip)
 		return -1;
 
 	std::string src = folderName + "/" + fileName + fileExtn;
-
-	const ZipEntry* binary = mzFindZipEntry(pZip, src.c_str());
-	if (binary == NULL) {
+	if (!pZip->ExtractEntry(src, destFile, 0666))
 		return -1;
-	}
-
-	unlink(destFile.c_str());
-	int fd = creat(destFile.c_str(), 0666);
-	if (fd < 0)
-		return -1;
-
-	int ret = 0;
-	if (!mzExtractZipEntryToFile(pZip, binary, fd))
-		ret = -1;
-
-	close(fd);
-	return ret;
+	return 0;
 }
 
-void Resource::LoadImage(ZipArchive* pZip, std::string file, gr_surface* surface)
+void Resource::LoadImage(ZipWrap* pZip, std::string file, gr_surface* surface)
 {
 	int rc = 0;
 	if (ExtractResource(pZip, "images", file, ".png", TMP_RESOURCE_NAME) == 0)
@@ -100,7 +105,7 @@ void Resource::CheckAndScaleImage(gr_surface source, gr_surface* destination, in
 	}
 }
 
-FontResource::FontResource(xml_node<>* node, ZipArchive* pZip)
+FontResource::FontResource(xml_node<>* node, ZipWrap* pZip)
  : Resource(node, pZip)
 {
 	origFontSize = 0;
@@ -108,7 +113,7 @@ FontResource::FontResource(xml_node<>* node, ZipArchive* pZip)
 	LoadFont(node, pZip);
 }
 
-void FontResource::LoadFont(xml_node<>* node, ZipArchive* pZip)
+void FontResource::LoadFont(xml_node<>* node, ZipWrap* pZip)
 {
 	std::string file;
 	xml_attribute<>* attr;
@@ -123,7 +128,7 @@ void FontResource::LoadFont(xml_node<>* node, ZipArchive* pZip)
 
 	file = attr->value();
 
-	if(file.size() >= 4 && file.compare(file.size()-4, 4, ".ttf") == 0)
+	if (file.size() >= 4 && file.compare(file.size()-4, 4, ".ttf") == 0)
 	{
 		int font_size = 0;
 
@@ -143,7 +148,7 @@ void FontResource::LoadFont(xml_node<>* node, ZipArchive* pZip)
 		int dpi = 300;
 
 		attr = node->first_attribute("dpi");
-		if(attr)
+		if (attr)
 			dpi = atoi(attr->value());
 
 		// we can't use TMP_RESOURCE_NAME here because the ttf subsystem is caching the name and scaling needs to reload the font
@@ -165,15 +170,15 @@ void FontResource::LoadFont(xml_node<>* node, ZipArchive* pZip)
 }
 
 void FontResource::DeleteFont() {
-	if(mFont)
+	if (mFont)
 		gr_ttf_freeFont(mFont);
 	mFont = NULL;
-	if(origFont)
+	if (origFont)
 		gr_ttf_freeFont(origFont);
 	origFont = NULL;
 }
 
-void FontResource::Override(xml_node<>* node, ZipArchive* pZip) {
+void FontResource::Override(xml_node<>* node, ZipWrap* pZip) {
 	if (!origFont) {
 		origFont = mFont;
 	} else if (mFont) {
@@ -188,7 +193,7 @@ FontResource::~FontResource()
 	DeleteFont();
 }
 
-ImageResource::ImageResource(xml_node<>* node, ZipArchive* pZip)
+ImageResource::ImageResource(xml_node<>* node, ZipWrap* pZip)
  : Resource(node, pZip)
 {
 	std::string file;
@@ -219,7 +224,7 @@ ImageResource::~ImageResource()
 		res_free_surface(mSurface);
 }
 
-AnimationResource::AnimationResource(xml_node<>* node, ZipArchive* pZip)
+AnimationResource::AnimationResource(xml_node<>* node, ZipWrap* pZip)
  : Resource(node, pZip)
 {
 	std::string file;
@@ -340,7 +345,7 @@ void ResourceManager::AddStringResource(std::string resource_source, std::string
 	mStrings[resource_name] = res;
 }
 
-void ResourceManager::LoadResources(xml_node<>* resList, ZipArchive* pZip, std::string resource_source)
+void ResourceManager::LoadResources(xml_node<>* resList, ZipWrap* pZip, std::string resource_source)
 {
 	if (!resList)
 		return;

@@ -1,27 +1,33 @@
 /*
-		TWRP is free software: you can redistribute it and/or modify
-		it under the terms of the GNU General Public License as published by
-		the Free Software Foundation, either version 3 of the License, or
-		(at your option) any later version.
+	TWRP is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-		TWRP is distributed in the hope that it will be useful,
-		but WITHOUT ANY WARRANTY; without even the implied warranty of
-		MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-		GNU General Public License for more details.
+	TWRP is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
 
-		You should have received a copy of the GNU General Public License
-		along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
+	You should have received a copy of the GNU General Public License
+	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef __TWADBSTREAM_H
 #define __TWADBSTREAM_H
 
+#define TWRPARG "--twrp"
+#define TWRP_BACKUP_ARG "backup"
+#define TWRP_RESTORE_ARG "restore"
+#define TWRP_STREAM_ARG "stream"
 #define TW_ADB_BACKUP "/tmp/twadbbackup"		//FIFO for adb backup
 #define TW_ADB_RESTORE "/tmp/twadbrestore"		//FIFO for adb restore
 #define TW_ADB_BU_CONTROL "/tmp/twadbbucontrol"		//FIFO for sending control from TWRP to ADB Backup
 #define TW_ADB_TWRP_CONTROL "/tmp/twadbtwrpcontrol"	//FIFO for sending control from ADB Backup to TWRP
 #define TWRP "TWRP"					//Magic Value
-#define ADB_BU_MAX_ERROR 10				//Max amount of errors for while loops
+#define ADB_BU_MAX_ERROR 20				//Max amount of errors for while loops
+#define ADB_BACKUP_OP "adbbackup"
+#define ADB_RESTORE_OP "adbrestore"
 
 //ADB Backup Control Commands
 #define TWSTREAMHDR "twstreamheader"			//TWRP Parititon Count Control
@@ -33,7 +39,7 @@
 #define TWMD5 "twverifymd5"				//This command is compared to the md5trailer by ORS to verify transfer
 #define TWENDADB "twendadb"				//End Protocol
 #define TWERROR "twerror"				//Send error
-#define ADB_BACKUP_VERSION 1				//Backup Version
+#define ADB_BACKUP_VERSION 2				//Backup Version
 #define DATA_MAX_CHUNK_SIZE 1048576			//Maximum size between each data header
 #define MAX_ADB_READ 512				//align with default tar size for amount to read fom adb stream
 
@@ -65,6 +71,11 @@ struct AdbBackupControlType {
 	char type[16];					//stores the type of command, TWENDADB, TWCNT, TWEOF, TWMD5, TWDATA and TWERROR
 	uint32_t crc;					//stores the zlib 32 bit crc of the AdbBackupControlType struct to allow for making sure we are processing metadata
 	char space[484];				//stores space to align the struct to 512 bytes
+
+	//return a C++ string while not reading outside the type char array
+	std::string get_type() {
+		return std::string(type, strnlen(type, sizeof(type)-1));
+	}
 };
 
 //general info for file metadata stored in adb backup header

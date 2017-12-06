@@ -8,27 +8,23 @@ LOCAL_SRC_FILES:= \
 	../twrp-functions.cpp \
 	../twrpTar.cpp \
 	../tarWrite.c \
-	../twrpDU.cpp \
+	../exclude.cpp \
 	../progresstracking.cpp \
 	../gui/twmsg.cpp
 LOCAL_CFLAGS:= -g -c -W -DBUILD_TWRPTAR_MAIN
 
 LOCAL_C_INCLUDES += bionic
+
+LOCAL_STATIC_LIBRARIES := libc libtar_static libz
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
     LOCAL_C_INCLUDES += external/stlport/stlport bionic/libstdc++/include
-endif
-
-LOCAL_STATIC_LIBRARIES := libc libtar_static
-ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
     LOCAL_STATIC_LIBRARIES += libstlport_static
 endif
 LOCAL_STATIC_LIBRARIES += libstdc++
 
-ifeq ($(TWHAVE_SELINUX), true)
-    LOCAL_C_INCLUDES += external/libselinux/include
-    LOCAL_STATIC_LIBRARIES += libselinux
-    LOCAL_CFLAGS += -DHAVE_SELINUX
-endif
+LOCAL_C_INCLUDES += external/libselinux/include
+LOCAL_STATIC_LIBRARIES += libselinux
+
 ifneq ($(RECOVERY_SDCARD_ON_DATA),)
 	LOCAL_CFLAGS += -DRECOVERY_SDCARD_ON_DATA
 endif
@@ -54,19 +50,22 @@ LOCAL_SRC_FILES:= \
 	../twrp-functions.cpp \
 	../twrpTar.cpp \
 	../tarWrite.c \
-	../twrpDU.cpp \
+	../exclude.cpp \
 	../progresstracking.cpp \
 	../gui/twmsg.cpp
 LOCAL_CFLAGS:= -g -c -W -DBUILD_TWRPTAR_MAIN
 
-LOCAL_C_INCLUDES += bionic external/stlport/stlport
-LOCAL_SHARED_LIBRARIES := libc libtar libstlport libstdc++
-
-ifeq ($(TWHAVE_SELINUX), true)
-    LOCAL_C_INCLUDES += external/libselinux/include
-    LOCAL_SHARED_LIBRARIES += libselinux
-    LOCAL_CFLAGS += -DHAVE_SELINUX
+LOCAL_C_INCLUDES += bionic
+LOCAL_SHARED_LIBRARIES := libc libtar libz
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
+    LOCAL_C_INCLUDES += external/stlport/stlport bionic/libstdc++/include
+    LOCAL_SHARED_LIBRARIES += libstlport_static
 endif
+LOCAL_SHARED_LIBRARIES += libstdc++
+
+LOCAL_C_INCLUDES += external/libselinux/include
+LOCAL_SHARED_LIBRARIES += libselinux
+
 ifneq ($(RECOVERY_SDCARD_ON_DATA),)
 	LOCAL_CFLAGS += -DRECOVERY_SDCARD_ON_DATA
 endif

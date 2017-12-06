@@ -1,5 +1,5 @@
 /*
-	Copyright 2014 to 2016 TeamWin
+	Copyright 2014 to 2017 TeamWin
 	This file is part of TWRP/TeamWin Recovery Project.
 
 	TWRP is free software: you can redistribute it and/or modify
@@ -19,9 +19,11 @@
 #ifndef __TWRP_Partition_Manager
 #define __TWRP_Partition_Manager
 
+#include <map>
 #include <vector>
 #include <string>
-#include "twrpDU.hpp"
+#include <sys/poll.h>
+#include "exclude.hpp"
 #include "tw_atomic.hpp"
 #include "progresstracking.hpp"
 
@@ -35,18 +37,37 @@ struct PartitionList {
 	unsigned int selected;
 };
 
-enum PartitionManager_Op {                                                        // PartitionManager Restore Mode for Raw_Read_Write()
+struct Uevent_Block_Data {
+	std::string action;
+	std::string subsystem;
+	std::string block_device;
+	std::string type;
+	std::string sysfs_path;
+	int major;
+	int minor;
+};
+
+struct Flags_Map {
+	std::string Primary_Block_Device;
+	std::string Alternate_Block_Device;
+	std::string File_System;
+	std::string Flags;
+	char* fstab_line;
+};
+
+enum PartitionManager_Op {                                                    // PartitionManager Restore Mode for Raw_Read_Write()
 	PM_BACKUP = 0,
 	PM_RESTORE = 1,
 };
 
 class TWPartition;
 
-struct PartitionSettings {                                                        // Settings for backup session
+struct PartitionSettings {                                                    // Settings for backup session
 	TWPartition* Part;                                                        // Partition to pass to the partition backup loop
 	std::string Backup_Folder;                                                // Path to restore folder
 	bool adbbackup;                                                           // tell the system we are backing up over adb
 	bool adb_compression;                                                     // 0 == uncompressed, 1 == compressed
+	bool generate_digest;                                                      // tell system to create digest for partitions
 	bool generate_md5;                                                        // tell system to create md5 for partitions
 	uint64_t total_restore_size;                                              // Total size of restored backup
 	uint64_t img_bytes_remaining;                                             // remaining img/emmc bytes to backup for progress indicator
@@ -90,7 +111,6 @@ public:
 	bool Can_Resize();                                                        // Checks to see if we have everything needed to be able to resize the current file system
 	bool Resize();                                                            // Resizes the current file system
 	bool Backup(PartitionSettings *part_settings, pid_t *tar_fork_pid);       // Backs up the partition to the folder specified
-	bool Check_MD5(PartitionSettings *part_settings);                         // Checks MD5 of a backup
 	bool Restore(PartitionSettings *part_settings);                           // Restores the partition using the backup folder provided
 	unsigned long long Get_Restore_Size(PartitionSettings *part_settings);    // Returns the overall restore size of the backup
 	string Backup_Method_By_Name();                                           // Returns a string of the backup method for human readable output
@@ -106,6 +126,8 @@ public:
 	int Decrypt_Adopted();
 	void Revert_Adopted();
 	void Partition_Post_Processing(bool Display_Error);                       // Apply partition specific settings after fstab processed
+	void Set_Backup_FileName(string fname);                                   // Set Backup_FileName for partition
+	string Get_Backup_Name();                                                 // Get Backup_Name for partition
 
 public:
 	string Current_File_System;                                               // Current file system
@@ -122,18 +144,20 @@ protected:
 	void Setup_Data_Media();                                                  // Sets up a partition as a /data/media emulated storage partition
 
 private:
-	bool Process_Fstab_Line(const char *fstab_line, bool Display_Error);      // Processes a fstab line
+	bool Process_Fstab_Line(const char *fstab_line, bool Display_Error, std::map<string, Flags_Map> *twrp_flags); // Processes a fstab line
 	void Setup_Data_Partition(bool Display_Error);                            // Setup data partition after fstab processed
 	void Setup_Cache_Partition(bool Display_Error);                           // Setup cache partition after fstab processed
+	bool Find_Wildcard_Block_Devices(const string& Device);                   // Searches for and finds wildcard block devices
 	void Find_Actual_Block_Device();                                          // Determines the correct block device and stores it in Actual_Block_Device
 
 	void Apply_TW_Flag(const unsigned flag, const char* str, const bool val); // Apply custom twrp fstab flags
-	void Process_TW_Flags(char *flags, bool Display_Error);                   // Process custom twrp fstab flags
+	void Process_TW_Flags(char *flags, bool Display_Error, int fstab_ver);    // Process custom twrp fstab flags
 	void Process_FS_Flags(const char *str);                                   // Process standard fstab fs flags
+	void Save_FS_Flags(const string& local_File_System, int local_Mount_Flags, const string& local_Mount_Options); // Saves fs flags to a vector in case there are multiple lines in a v2 fstab with different mount flags for different file systems
 	bool Is_File_System(string File_System);                                  // Checks to see if the file system given is considered a file system
 	bool Is_Image(string File_System);                                        // Checks to see if the file system given is considered an image
 	void Setup_File_System(bool Display_Error);                               // Sets defaults for a file system partition
-	void Setup_Image(bool Display_Error);                                     // Sets defaults for an image partition
+	void Setup_Image();                                                       // Sets defaults for an image partition
 	void Setup_AndSec(void);                                                  // Sets up .android_secure settings
 	void Find_Real_Block_Device(string& Block_Device, bool Display_Error);    // Checks the block device given and follows symlinks until it gets to the real block device
 	unsigned long long IOCTL_Get_Block_Size();                                // Finds the partition size using ioctl
@@ -156,6 +180,7 @@ private:
 	string Get_Restore_File_System(PartitionSettings *part_settings);         // Returns the file system that was in place at the time of the backup
 	bool Restore_Tar(PartitionSettings *part_settings);                       // Restore using tar for file systems
 	bool Restore_Image(PartitionSettings *part_settings);                     // Restore using dd for images
+	bool Check_Restore_File_MD5(const string& Filename);                      // Verifies MD5 matches for a file before restoration
 	bool Get_Size_Via_statfs(bool Display_Error);                             // Get Partition size, used, and free space using statfs
 	bool Get_Size_Via_df(bool Display_Error);                                 // Get Partition size, used, and free space using df command
 	bool Make_Dir(string Path, bool Display_Error);                           // Creates a directory if it doesn't already exist
@@ -165,6 +190,7 @@ private:
 	bool Is_Sparse_Image(const string& Filename);                             // Determines if a file is in sparse image format
 	bool Flash_Sparse_Image(const string& Filename);                          // Flashes a sparse image using simg2img
 	bool Flash_Image_FI(const string& Filename, ProgressTracking *progress);  // Flashes an image to the partition using flash_image for mtd nand
+	void ExcludeAll(const string& path);                                      // Adds an exclusion for path to both the backup and wipe exclusion lists
 
 private:
 	bool Can_Be_Mounted;                                                      // Indicates that the partition can be mounted
@@ -180,6 +206,8 @@ private:
 	string Symlink_Mount_Point;                                               // /sdcard could be the symlink mount point for /data/media
 	string Mount_Point;                                                       // Mount point for this partition (e.g. /system or /data)
 	string Backup_Path;                                                       // Path for backup
+	bool Wildcard_Block_Device;                                               // If the block device contains an asterisk, we set this flag
+	string Sysfs_Entry;                                                       // For v2 fstab, if the "block device" starts with /devices then it is a sysfs entry that is handled by uevents
 	string Primary_Block_Device;                                              // Block device (e.g. /dev/block/mmcblk1p1)
 	string Alternate_Block_Device;                                            // Alternate block device (e.g. /dev/block/mmcblk1)
 	string Decrypted_Block_Device;                                            // Decrypted block device available after decryption
@@ -193,6 +221,7 @@ private:
 	bool Can_Be_Encrypted;                                                    // This partition might be encrypted, affects error handling, can only be true if crypto support is compiled in
 	bool Is_Encrypted;                                                        // This partition is thought to be encrypted -- it wouldn't mount for some reason, only avialble with crypto support
 	bool Is_Decrypted;                                                        // This partition has successfully been decrypted
+	bool Is_FBE;                                                              // File Based Encryption is present
 	bool Mount_To_Decrypt;                                                    // Mount this partition during decrypt (/vendor, /firmware, etc in case we need proprietary libs or firmware files)
 	string Display_Name;                                                      // Display name for the GUI
 	string Backup_Name;                                                       // Backup name -- used for backup filenames
@@ -214,6 +243,17 @@ private:
 	bool Can_Flash_Img;                                                       // Indicates if this partition can have images flashed to it via the GUI
 	bool Mount_Read_Only;                                                     // Only mount this partition as read-only
 	bool Is_Adopted_Storage;                                                  // Indicates that this partition is for adopted storage (android_expand)
+	bool SlotSelect;                                                          // Partition has A/B slots
+	TWExclude backup_exclusions;                                              // Exclusions for file based backups
+	TWExclude wipe_exclusions;                                                // Exclusions for file based wipes (data/media devices only)
+
+	struct partition_fs_flags_struct {                                        // This struct is used to store mount flags and options for different file systems for the same partition
+		string File_System;
+		int Mount_Flags;
+		string Mount_Options;
+	};
+
+	std::vector<partition_fs_flags_struct> fs_flags;                          // This vector stores mount flags and options for different file systems for the same partition
 
 friend class TWPartitionManager;
 friend class DataManager;
@@ -232,12 +272,14 @@ public:
 	int Process_Fstab(string Fstab_Filename, bool Display_Error);             // Parses the fstab and populates the partitions
 	int Write_Fstab();                                                        // Creates /etc/fstab file that's used by the command line for mount commands
 	void Output_Partition_Logging();                                          // Outputs partition information to the log
+	void Output_Partition(TWPartition* Part);                                 // Outputs partition details to the log
 	int Mount_By_Path(string Path, bool Display_Error);                       // Mounts partition based on path (e.g. /system)
 	int UnMount_By_Path(string Path, bool Display_Error);                     // Unmounts partition based on path
 	int Is_Mounted_By_Path(string Path);                                      // Checks if partition is mounted based on path
 	int Mount_Current_Storage(bool Display_Error);                            // Mounts the current storage location
 	int Mount_Settings_Storage(bool Display_Error);                           // Mounts the settings file storage location (usually internal)
-	TWPartition* Find_Partition_By_Path(string Path);                         // Returns a pointer to a partition based on path
+	TWPartition* Find_Partition_By_Path(const string& Path);                  // Returns a pointer to a partition based on path
+	TWPartition* Find_Partition_By_Block_Device(const string& Block_Device);  // Returns a pointer to a partition based on block device
 	int Check_Backup_Name(bool Display_Error);                                // Checks the current backup name to ensure that it is valid
 	int Run_Backup(bool adbbackup);                                           // Initiates a backup in the current storage
 	int Run_Restore(const string& Restore_Name);                              // Restores a backup
@@ -279,24 +321,37 @@ public:
 	bool Remove_MTP_Storage(unsigned int Storage_ID);                         // Adds or removes an MTP Storage partition
 	void Translate_Partition(const char* path, const char* resource_name, const char* default_value);
 	void Translate_Partition(const char* path, const char* resource_name, const char* default_value, const char* storage_resource_name, const char* storage_default_value);
+	void Translate_Partition(const char* path, const char* resource_name, const char* default_value, const char* storage_resource_name, const char* storage_default_value, const char* backup_name, const char* backup_default);
 	void Translate_Partition_Display_Names();                                 // Updates display names based on translations
-	void Decrypt_Adopted();                                                   // Attempt to identy and decrypt any adopted storage partitions
+	bool Decrypt_Adopted();                                                   // Attempt to identy and decrypt any adopted storage partitions
 	void Remove_Partition_By_Path(string Path);                               // Removes / erases a partition entry from the partition list
 
 	bool Flash_Image(string& path, string& filename);                         // Flashes an image to a selected partition from the partition list
 	bool Restore_Partition(struct PartitionSettings *part_settings);          // Restore the partitions based on type
 	TWAtomicInt stop_backup;
+	void Set_Active_Slot(const string& Slot);                                 // Sets the active slot to A or B
+	string Get_Active_Slot_Suffix();                                          // Returns active slot _a or _b
+	string Get_Active_Slot_Display();                                         // Returns active slot A or B for display purposes
+	struct pollfd uevent_pfd;                                                 // Used for uevent code
+	void Remove_Uevent_Devices(const string& sysfs_path);                     // Removes subpartitions from the Partitions vector for a matched uevent device
+	void Handle_Uevent(const Uevent_Block_Data& uevent_data);                 // Handle uevent data
+	void setup_uevent();                                                      // Opens the uevent netlink socket
+	Uevent_Block_Data get_event_block_values(char *buf, int len);             // Scans the buffer from uevent data and loads the appropriate data into a Uevent_Block_Data struct for processing
+	void read_uevent();                                                       // Reads uevent data into a buffer
+	void close_uevent();                                                      // Closes the uevent netlink socket
+	void Add_Partition(TWPartition* Part);                                    // Adds a new partition to the Partitions vector
 
 private:
 	void Setup_Settings_Storage_Partition(TWPartition* Part);                 // Sets up settings storage
 	void Setup_Android_Secure_Location(TWPartition* Part);                    // Sets up .android_secure if needed
-	bool Make_MD5(struct PartitionSettings *part_settings);                   // Generates an MD5 after a backup is made
 	bool Backup_Partition(struct PartitionSettings *part_settings);           // Backup the partitions based on type
-	void Output_Partition(TWPartition* Part);                                 // Outputs partition details to the log
 	TWPartition* Find_Partition_By_MTP_Storage_ID(unsigned int Storage_ID);   // Returns a pointer to a partition based on MTP Storage ID
 	bool Add_Remove_MTP_Storage(TWPartition* Part, int message_type);         // Adds or removes an MTP Storage partition
 	TWPartition* Find_Next_Storage(string Path, bool Exclude_Data_Media);
 	int Open_Lun_File(string Partition_Path, string Lun_File);
+	void Post_Decrypt(const string& Block_Device);                            // Completes various post-decrypt tasks
+	void Coldboot_Scan(std::vector<string> *sysfs_entries, const string& Path, int depth); // Scans subfolders to find matches to the paths stored in sysfs_entries so we can trigger the uevent system to "re-add" devices
+	void Coldboot();                                                          // Starts the scan of the /sys/block folder
 	pid_t mtppid;
 	bool mtp_was_enabled;
 	int mtp_write_fd;
@@ -305,6 +360,7 @@ private:
 
 private:
 	std::vector<TWPartition*> Partitions;                                     // Vector list of all partitions
+	string Active_Slot_Display;                                               // Current Active Slot (A or B) for display purposes
 };
 
 extern TWPartitionManager PartitionManager;

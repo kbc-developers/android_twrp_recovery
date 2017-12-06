@@ -34,6 +34,7 @@ extern "C" {
 #include "../twcommon.h"
 }
 #include "../minuitwrp/minui.h"
+#include "gui.hpp"
 
 #include "rapidxml.hpp"
 #include "objects.hpp"
@@ -83,6 +84,7 @@ public:
 			// and write it to the terminal
 			// this currently works through gui.cpp calling terminal_pty_read below
 			g_pty_fd = fdMaster;
+			set_select_fd();
 			return true;
 		}
 		else {
@@ -174,6 +176,7 @@ public:
 		}
 		close(fdMaster);
 		g_pty_fd = fdMaster = -1;
+		set_select_fd();
 		int status;
 		waitpid(pid, &status, WNOHANG); // avoid zombies but don't hang if the child is still alive and we got here due to some error
 		pid = 0;
@@ -389,6 +392,7 @@ public:
 		lines.clear();
 		setY(0);
 		unpackLine(0);
+		linewrap = false;
 		++updateCounter;
 	}
 
@@ -465,6 +469,7 @@ public:
 	{
 		x = min(width, max(x, 0));
 		cursorX = x;
+		linewrap = false;
 		++updateCounter;
 	}
 
@@ -473,6 +478,7 @@ public:
 		//y = min(height, max(y, 0));
 		y = max(y, 0);
 		cursorY = y;
+		linewrap = false;
 		while (lines.size() <= (size_t) y)
 			lines.push_back(Line());
 		++updateCounter;
@@ -500,7 +506,7 @@ private:
 		uint32_t u8state = 0, u8cp = 0;
 		std::string& s = lines[y].text;
 		unpackedLine.cells.clear();
-		for(size_t i = 0; i < s.size(); ++i) {
+		for (size_t i = 0; i < s.size(); ++i) {
 			uint32_t rc = utf8decode(&u8state, &u8cp, (unsigned char)s[i]);
 			if (rc == UTF8_ACCEPT)
 				unpackedLine.cells.push_back(Cell(u8cp));
@@ -581,21 +587,20 @@ private:
 
 	void processChar(CodePoint cp)
 	{
+		if (linewrap) {
+			down();
+			setX(0);
+		}
 		ensureUnpacked(cursorY);
 		// extend unpackedLine if needed, write ch into cell
 		if (unpackedLine.cells.size() <= (size_t)cursorX)
 			unpackedLine.cells.resize(cursorX+1);
 		unpackedLine.cells[cursorX].cp = cp;
 
-		right();
+		right(); // also bumps updateCounter
+
 		if (cursorX >= width)
-		{
-			// TODO: configurable line wrapping
-			// TODO: don't go down immediately but only on next char?
-			down();
-			setX(0);
-		}
-		// TODO: update all GUI objects that display this terminal engine
+			linewrap = true;
 	}
 
 	void processEsc(CodePoint cp)
@@ -744,6 +749,7 @@ private:
 
 private:
 	int cursorX, cursorY; // 0-based, char based. TODO: decide how to handle scrollback
+	bool linewrap; // true to put next character into next line
 	int width, height; // window size in chars
 	std::vector<Line> lines; // the text buffer
 	UnpackedLine unpackedLine; // current line for editing
@@ -776,7 +782,10 @@ GUITerminal::GUITerminal(xml_node<>* node) : GUIScrollList(node)
 	lastCondition = false;
 
 	if (!node) {
-		mRenderX = 0; mRenderY = 0; mRenderW = gr_fb_width(); mRenderH = gr_fb_height();
+		mRenderX = 0;
+		mRenderY = 0;
+		mRenderW = gr_fb_width();
+		mRenderH = gr_fb_height();
 	}
 
 	engine = &gEngine;
@@ -785,7 +794,7 @@ GUITerminal::GUITerminal(xml_node<>* node) : GUIScrollList(node)
 
 int GUITerminal::Update(void)
 {
-	if(!isConditionTrue()) {
+	if (!isConditionTrue()) {
 		lastCondition = false;
 		return 0;
 	}
@@ -816,7 +825,7 @@ int GUITerminal::Update(void)
 //  Return 0 on success, >0 to ignore remainder of touch, and <0 on error
 int GUITerminal::NotifyTouch(TOUCH_STATE state, int x, int y)
 {
-	if(!isConditionTrue())
+	if (!isConditionTrue())
 		return -1;
 
 	// TODO: grab focus correctly

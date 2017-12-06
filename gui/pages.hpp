@@ -1,9 +1,27 @@
+/*
+	Copyright 2017 TeamWin
+	This file is part of TWRP/TeamWin Recovery Project.
+
+	TWRP is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	TWRP is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with TWRP.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 // pages.hpp - Base classes for page manager of GUI
 
 #ifndef _PAGES_HEADER_HPP
 #define _PAGES_HEADER_HPP
 
-#include "../minzip/Zip.h"
+#include "../zipwrap.hpp"
 #include <vector>
 #include <map>
 #include <string>
@@ -98,7 +116,7 @@ public:
 
 public:
 	int Load(LoadingContext& ctx, const std::string& filename);
-	int LoadLanguage(char* languageFile, ZipArchive* package);
+	int LoadLanguage(char* languageFile, ZipWrap* package);
 	void MakeEmergencyConsoleIfNeeded();
 
 	Page* FindPage(std::string name);
@@ -137,8 +155,8 @@ class PageManager
 {
 public:
 	// Used by GUI
-	static char* LoadFileToBuffer(std::string filename, ZipArchive* package);
-	static void LoadLanguageList(ZipArchive* package);
+	static char* LoadFileToBuffer(std::string filename, ZipWrap* package);
+	static void LoadLanguageList(ZipWrap* package);
 	static void LoadLanguage(std::string filename);
 	static int LoadPackage(std::string name, std::string package, std::string startpage);
 	static PageSet* SelectPackage(std::string name);

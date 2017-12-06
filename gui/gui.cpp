@@ -33,7 +33,6 @@
 #include <sys/mount.h>
 #include <time.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 extern "C"
 {
@@ -79,11 +78,13 @@ int gGuiRunning = 0;
 int g_pty_fd = -1;  // set by terminal on init
 void terminal_pty_read();
 
+int select_fd = 0;
+
 static int gRecorder = -1;
 
 extern "C" void gr_write_frame_to_file(int fd);
 
-void flip(void)
+static void flip(void)
 {
 	if (gRecorder != -1)
 	{
@@ -205,7 +206,9 @@ bool InputHandler::processInput(int timeout_ms)
 		break;
 	}
 
-	blankTimer.resetTimerAndUnblank();
+	if (ev.code != KEY_POWER && ev.code > KEY_RESERVED)
+		blankTimer.resetTimerAndUnblank();
+
 	return true;  // we got an event, so there might be more in the queue
 }
 
@@ -300,15 +303,15 @@ void InputHandler::process_EV_KEY(input_event& ev)
 	// Handle key-press here
 	LOGEVENT("TOUCH_KEY: %d\n", ev.code);
 	// Left mouse button is treated as a touch
-	if(ev.code == BTN_LEFT)
+	if (ev.code == BTN_LEFT)
 	{
 		MouseCursor *cursor = PageManager::GetMouseCursor();
-		if(ev.value == 1)
+		if (ev.value == 1)
 		{
 			cursor->GetPos(x, y);
 			doTouchStart();
 		}
-		else if(touch_status)
+		else if (touch_status)
 		{
 			// Left mouse button was previously pressed and now is
 			// being released so send a TOUCH_RELEASE
@@ -323,9 +326,9 @@ void InputHandler::process_EV_KEY(input_event& ev)
 		}
 	}
 	// side mouse button, often used for "back" function
-	else if(ev.code == BTN_SIDE)
+	else if (ev.code == BTN_SIDE)
 	{
-		if(ev.value == 1)
+		if (ev.value == 1)
 			kb->KeyDown(KEY_BACK);
 		else
 			kb->KeyUp(KEY_BACK);
@@ -366,12 +369,12 @@ void InputHandler::process_EV_REL(input_event& ev)
 	// Mouse movement
 	MouseCursor *cursor = PageManager::GetMouseCursor();
 	LOGEVENT("EV_REL %d %d\n", ev.code, ev.value);
-	if(ev.code == REL_X)
+	if (ev.code == REL_X)
 		cursor->Move(ev.value, 0);
-	else if(ev.code == REL_Y)
+	else if (ev.code == REL_Y)
 		cursor->Move(0, ev.value);
 
-	if(touch_status) {
+	if (touch_status) {
 		cursor->GetPos(x, y);
 		LOGEVENT("Mouse TOUCH_DRAG: %d, %d\n", x, y);
 		key_status = KS_NONE;
@@ -393,9 +396,18 @@ void InputHandler::handleDrag()
 	}
 }
 
+void set_select_fd() {
+	select_fd = ors_read_fd + 1;
+	if (g_pty_fd >= select_fd)
+		select_fd = g_pty_fd + 1;
+	if (PartitionManager.uevent_pfd.fd >= select_fd)
+		select_fd = PartitionManager.uevent_pfd.fd + 1;
+}
+
 static void setup_ors_command()
 {
 	ors_read_fd = -1;
+	set_select_fd();
 
 	unlink(ORS_INPUT_FILE);
 	if (mkfifo(ORS_INPUT_FILE, 06660) != 0) {
@@ -415,6 +427,7 @@ static void setup_ors_command()
 		unlink(ORS_INPUT_FILE);
 		unlink(ORS_OUTPUT_FILE);
 	}
+	set_select_fd();
 }
 
 // callback called after a CLI command was executed
@@ -446,6 +459,7 @@ static void ors_command_read()
 		if (!orsout) {
 			close(ors_read_fd);
 			ors_read_fd = -1;
+			set_select_fd();
 			LOGINFO("Unable to fopen %s\n", ORS_OUTPUT_FILE);
 			unlink(ORS_INPUT_FILE);
 			unlink(ORS_OUTPUT_FILE);
@@ -459,14 +473,6 @@ static void ors_command_read()
 			if (strlen(command) == 11 && strncmp(command, "dumpstrings", 11) == 0) {
 				gui_set_FILE(orsout);
 				PageManager::GetResources()->DumpStrings();
-				ors_command_done();
-			//check to see if we should show backup page for parsing adbbackup partitions
-			} else if (strlen(command) == 23 && strncmp(command, "adbbackup", 9) == 0) {
-				gui_set_FILE(orsout);
-				DataManager::SetValue("tw_action", "twcmd");
-				DataManager::SetValue("tw_action_param", command);
-				DataManager::SetValue("tw_enable_adb_backup", 1);
-				gui_changePage("backup");
 				ors_command_done();
 			} else {
 				// mirror output messages
@@ -560,29 +566,30 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	for (;;)
 	{
 		loopTimer(input_timeout_ms);
+		FD_ZERO(&fdset);
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 1;
 		if (g_pty_fd > 0) {
-			// TODO: this is not nice, we should have one central select for input, pty, and ors
-			FD_ZERO(&fdset);
 			FD_SET(g_pty_fd, &fdset);
-			timeout.tv_sec = 0;
-			timeout.tv_usec = 1;
-			has_data = select(g_pty_fd+1, &fdset, NULL, NULL, &timeout);
-			if (has_data > 0) {
-				terminal_pty_read();
-			}
+		}
+		if (PartitionManager.uevent_pfd.fd > 0) {
+			FD_SET(PartitionManager.uevent_pfd.fd, &fdset);
 		}
 #ifndef TW_OEM_BUILD
 		if (ors_read_fd > 0 && !orsout) { // orsout is non-NULL if a command is still running
-			FD_ZERO(&fdset);
 			FD_SET(ors_read_fd, &fdset);
-			timeout.tv_sec = 0;
-			timeout.tv_usec = 1;
-			has_data = select(ors_read_fd+1, &fdset, NULL, NULL, &timeout);
-			if (has_data > 0) {
-				ors_command_read();
-			}
 		}
 #endif
+		// TODO: combine this select with the poll done by input handling
+		has_data = select(select_fd, &fdset, NULL, NULL, &timeout);
+		if (has_data > 0) {
+			if (g_pty_fd > 0 && FD_ISSET(g_pty_fd, &fdset))
+				terminal_pty_read();
+			if (PartitionManager.uevent_pfd.fd > 0 && FD_ISSET(PartitionManager.uevent_pfd.fd, &fdset))
+				PartitionManager.read_uevent();
+			if (ors_read_fd > 0 && !orsout && FD_ISSET(ors_read_fd, &fdset))
+				ors_command_read();
+		}
 
 		if (!gForceRender.get_value())
 		{
@@ -642,6 +649,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	if (ors_read_fd > 0)
 		close(ors_read_fd);
 	ors_read_fd = -1;
+	set_select_fd();
 	gGuiRunning = 0;
 	return 0;
 }
