@@ -156,7 +156,6 @@ ifeq ($(TW_OEM_BUILD),true)
     LOCAL_CFLAGS += -DTW_OEM_BUILD
     BOARD_HAS_NO_REAL_SDCARD := true
     TW_USE_TOOLBOX := true
-    TW_EXCLUDE_SUPERSU := true
     TW_EXCLUDE_MTP := true
 endif
 
@@ -230,9 +229,6 @@ endif
 ifneq ($(TW_EXTERNAL_STORAGE_MOUNT_POINT),)
 	LOCAL_CFLAGS += -DTW_EXTERNAL_STORAGE_MOUNT_POINT=$(TW_EXTERNAL_STORAGE_MOUNT_POINT)
 endif
-ifeq ($(TW_HAS_NO_RECOVERY_PARTITION), true)
-    LOCAL_CFLAGS += -DTW_HAS_NO_RECOVERY_PARTITION
-endif
 ifeq ($(TW_HAS_NO_BOOT_PARTITION), true)
     LOCAL_CFLAGS += -DTW_HAS_NO_BOOT_PARTITION
 endif
@@ -272,9 +268,6 @@ endif
 ifneq ($(BOARD_UMS_LUNFILE),)
     LOCAL_CFLAGS += -DCUSTOM_LUN_FILE=\"$(BOARD_UMS_LUNFILE)\"
 endif
-#ifeq ($(TW_FLASH_FROM_STORAGE), true) Making this the default behavior
-    LOCAL_CFLAGS += -DTW_FLASH_FROM_STORAGE
-#endif
 ifeq ($(TW_HAS_DOWNLOAD_MODE), true)
     LOCAL_CFLAGS += -DTW_HAS_DOWNLOAD_MODE
 endif
@@ -366,7 +359,9 @@ ifneq ($(TW_DEFAULT_LANGUAGE),)
 else
     LOCAL_CFLAGS += -DTW_DEFAULT_LANGUAGE=en
 endif
-
+ifneq ($(TW_CLOCK_OFFSET),)
+	LOCAL_CFLAGS += -DTW_CLOCK_OFFSET=$(TW_CLOCK_OFFSET)
+endif
 LOCAL_ADDITIONAL_DEPENDENCIES += \
     dump_image \
     erase_image \
@@ -433,18 +428,6 @@ ifeq ($(TW_INCLUDE_DUMLOCK), true)
     LOCAL_ADDITIONAL_DEPENDENCIES += \
         htcdumlock htcdumlocksys flash_imagesys dump_imagesys libbmlutils.so \
         libflashutils.so libmmcutils.so libmtdutils.so HTCDumlock.apk
-endif
-ifneq ($(TW_EXCLUDE_SUPERSU), true)
-    LOCAL_ADDITIONAL_DEPENDENCIES += \
-        install-recovery.sh 99SuperSUDaemon Superuser.apk
-    ifeq ($(TARGET_ARCH), arm)
-        LOCAL_ADDITIONAL_DEPENDENCIES += \
-            chattr.pie libsupol.so suarm supolicy
-    endif
-    ifeq ($(TARGET_ARCH), arm64)
-        LOCAL_ADDITIONAL_DEPENDENCIES += \
-            libsupol.soarm64 suarm64 supolicyarm64
-    endif
 endif
 ifeq ($(TW_INCLUDE_FB2PNG), true)
     LOCAL_ADDITIONAL_DEPENDENCIES += fb2png
